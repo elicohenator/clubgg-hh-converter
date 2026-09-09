@@ -44,6 +44,14 @@ Hand histories under `input/`, `output/`, and `hands/` are gitignored recursivel
 - **6-card Omaha** is rewritten but PT4 does not import that game type.
 - MTT hand histories only.
 
+## Disclaimer
+
+This project is **not affiliated with** ClubGG, GGPoker, PokerCraft, or PokerTracker. It is provided for **educational and personal offline study** of hand histories you already exported.
+
+Using converted files with a tracker, HUD, or any third-party tool may violate ClubGG, GGPoker, and/or PokerTracker terms. You are responsible for reading those terms and deciding whether your use is allowed. This converter does not grant permission to bypass site rules, enable live HUD play, or redistribute other players' hand data.
+
+The software is provided as-is, without warranty. See [LICENSE](LICENSE).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
