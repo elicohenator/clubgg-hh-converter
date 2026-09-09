@@ -10,20 +10,25 @@ Cash games and tournament-summary files are out of scope.
 
 Python 3, no extra packages.
 
+1. Put ClubGG `.txt` files in `input/`
+2. Run:
+
+```text
+python convert.py
+```
+
+3. Import the files in `output/` into PT4 via **Play Poker → Get Hands From Disk**
+
+You can still pass other paths:
+
 ```text
 python convert.py INPUT [-o OUTPUT]
 ```
 
-- `INPUT` — one `.txt` file or a folder of `.txt` files
-- `OUTPUT` — file or folder (default: a sibling `INPUT_pt4` folder)
+- `INPUT` — one `.txt` file or a folder (default: `input/`)
+- `OUTPUT` — file or folder (default: `output/`)
 
-Example:
-
-```text
-python convert.py hands -o output
-```
-
-Then in PT4: **Play Poker → Get Hands From Disk** and select the output folder.
+Hand histories under `input/`, `output/`, and `hands/` are gitignored recursively. Only the empty `input/` and `output/` folders are tracked. Do not force-add those files.
 
 ## What it fixes
 
@@ -38,8 +43,6 @@ Then in PT4: **Play Poker → Get Hands From Disk** and select the output folder
 
 - **6-card Omaha** is rewritten but PT4 does not import that game type.
 - MTT hand histories only.
-
-Do not commit downloaded hand-history folders. `hands/` and `output/` are gitignored.
 
 ## License
 

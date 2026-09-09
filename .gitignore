@@ -6,5 +6,8 @@ venv/
 *.egg-info/
 .DS_Store
 hands/
-input/
-output/
+hands/**
+input/**
+!input/.gitkeep
+output/**
+!output/.gitkeep

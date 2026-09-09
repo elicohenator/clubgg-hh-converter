@@ -373,15 +373,24 @@ def convert_text(text: str, stats: Stats) -> tuple[str, str | None]:
     return "\n\n\n".join(converted).rstrip() + "\n", tour_id
 
 
+def safe_filename(name: str) -> str:
+    cleaned = name.replace("\\", "/").split("/")[-1].replace("\x00", "")
+    if not cleaned or cleaned in {".", ".."}:
+        return "hand.txt"
+    return cleaned
+
+
 def output_filename(src_name: str, tour_id: str | None) -> str:
     stem = Path(src_name).stem
     match = GG_DATE_PREFIX_RE.match(stem)
     if not match:
-        return src_name if src_name.endswith(".txt") else f"{src_name}.txt"
+        base = src_name if src_name.lower().endswith(".txt") else f"{src_name}.txt"
+        return safe_filename(base)
     prefix, rest = match.group(1), match.group(2).strip()
     if not rest or re.fullmatch(r"\(\d+\)", rest):
         rest = f"Tournament {tour_id}" if tour_id else "ClubGG"
-    return f"{prefix} - {rest}.txt"
+    rest = safe_filename(rest).removesuffix(".txt")
+    return safe_filename(f"{prefix} - {rest}.txt")
 
 
 def read_text(path: Path) -> str:
@@ -395,25 +404,36 @@ def read_text(path: Path) -> str:
 
 
 def collect_inputs(src: Path) -> list[Path]:
+    if src.is_symlink():
+        return []
     if src.is_file():
         return [src]
-    return sorted(p for p in src.rglob("*.txt") if p.is_file())
+    found: list[Path] = []
+    for path in src.rglob("*.txt"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        found.append(path)
+    return sorted(found)
 
 
-def dest_for(src: Path, root: Path, out: Path | None, tour_id: str | None) -> Path:
+def dest_for(src: Path, root: Path, out: Path, tour_id: str | None) -> Path:
     name = output_filename(src.name, tour_id)
-    if out is None:
-        if root.is_file():
-            return root.parent / f"{root.stem}_pt4" / name
-        return Path(str(root) + "_pt4") / src.relative_to(root).with_name(name)
     if out.suffix.lower() == ".txt" and root.is_file():
-        return out
-    if root.is_file():
-        return out / name
-    return out / src.relative_to(root).with_name(name)
+        dest = out
+    elif root.is_file():
+        dest = out / name
+    else:
+        dest = out / src.relative_to(root).with_name(name)
+    out_root = out.parent.resolve() if out.suffix.lower() == ".txt" else out.resolve()
+    resolved = dest.resolve()
+    try:
+        resolved.relative_to(out_root)
+    except ValueError as exc:
+        raise OSError(f"Refusing to write outside output folder: {dest}") from exc
+    return dest
 
 
-def convert_path(src: Path, out: Path | None, stats: Stats) -> None:
+def convert_path(src: Path, out: Path, stats: Stats) -> None:
     inputs = collect_inputs(src)
     if not inputs:
         print(f"No .txt files found in {src}", file=sys.stderr)
@@ -436,16 +456,30 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Convert ClubGG MTT hand histories to GGPoker/PT4 format."
     )
-    parser.add_argument("input", type=Path, help="A .txt file or a folder of .txt files")
+    parser.add_argument(
+        "input",
+        nargs="?",
+        type=Path,
+        default=Path("input"),
+        help="A .txt file or a folder of .txt files (default: ./input)",
+    )
     parser.add_argument(
         "-o",
         "--output",
         type=Path,
-        help="Output file or folder (default: INPUT_pt4 next to the input)",
+        default=Path("output"),
+        help="Output file or folder (default: ./output)",
     )
     args = parser.parse_args(argv)
     src = args.input
     if not src.exists():
+        if src == Path("input"):
+            src.mkdir(parents=True, exist_ok=True)
+            print(
+                f"Created {src.resolve()}. Drop ClubGG .txt files there and run again.",
+                file=sys.stderr,
+            )
+            return 2
         print(f"Input not found: {src}", file=sys.stderr)
         return 2
     stats = Stats()
