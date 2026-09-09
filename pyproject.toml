@@ -1,0 +1,11 @@
+[project]
+name = "clubgg-hh-converter"
+version = "1.0.0"
+description = "Convert Hebrew (and global) ClubGG MTT hand histories to GGPoker format for PokerTracker 4."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+dependencies = []
+
+[tool.setuptools]
+py-modules = ["convert"]

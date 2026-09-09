@@ -8,6 +8,8 @@ import re
 import sys
 from pathlib import Path
 
+__version__ = "1.0.0"
+
 POT_EXTRAS = " | Rake 0 | Jackpot 0 | Bingo 0 | Fortune 0 | Tax 0"
 
 HAND_SPLIT_RE = re.compile(r"(?=^Poker Hand #)", re.MULTILINE)
@@ -455,6 +457,12 @@ def convert_path(src: Path, out: Path, stats: Stats) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Convert ClubGG MTT hand histories to GGPoker/PT4 format."
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"clubgg-hh-converter {__version__}",
     )
     parser.add_argument(
         "input",

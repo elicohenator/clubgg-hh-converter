@@ -6,9 +6,9 @@ This project is **mostly for Hebrew ClubGG exports** (reversed Hebrew tournament
 
 Cash games and tournament-summary files are out of scope.
 
-## Usage
+Version **1.0.0**. Requires **Python 3.9+**. No third-party packages (`requirements.txt` is empty on purpose).
 
-Python 3, no extra packages.
+## Usage
 
 1. Put ClubGG `.txt` files in `input/`
 2. Run:
@@ -43,6 +43,12 @@ Hand histories under `input/`, `output/`, and `hands/` are gitignored recursivel
 
 - **6-card Omaha** is rewritten but PT4 does not import that game type.
 - MTT hand histories only.
+
+## Tests
+
+```text
+python -m unittest tests.test_convert
+```
 
 ## Disclaimer
 
