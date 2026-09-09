@@ -20,7 +20,7 @@ python convert.py INPUT [-o OUTPUT]
 Example:
 
 ```text
-python convert.py comboguy -o output
+python convert.py hands -o output
 ```
 
 Then in PT4: **Play Poker → Get Hands From Disk** and select the output folder.
@@ -32,14 +32,14 @@ Then in PT4: **Play Poker → Get Hands From Disk** and select the output folder
 - Missing ante in `Level(sb/bb)` from `posts the ante`
 - Empty `Table ''`, `Seat #0` button, glued summary text (`Hero(small blind)`, `abcwon`)
 - Missing `posts big blind` when the BB is already all-in on the ante
-- Session filenames like `GG20260829-2100 - .txt` → `GG20260829-2100 - Tournament 3853686.txt`
+- Session filenames like `GG20240115-1800 - .txt` → `GG20240115-1800 - Tournament 1234567.txt`
 
 ## Limits
 
 - **6-card Omaha** is rewritten but PT4 does not import that game type.
 - MTT hand histories only.
 
-Do not commit downloaded hand-history folders. `comboguy/` and `output/` are gitignored on purpose.
+Do not commit downloaded hand-history folders. `hands/` and `output/` are gitignored.
 
 ## License
 
