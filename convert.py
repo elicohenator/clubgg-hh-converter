@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 
 POT_EXTRAS = " | Rake 0 | Jackpot 0 | Bingo 0 | Fortune 0 | Tax 0"
 
@@ -35,7 +35,9 @@ SEAT_RE = re.compile(
 DEALT_CARDS_RE = re.compile(r"^Dealt to \S+ \[(?P<cards>[^\]]+)\]\s*$")
 ANTE_RE = re.compile(r"^(\S+): posts the ante ([\d,]+)")
 SB_RE = re.compile(r"^(\S+): posts small blind ")
-BB_RE = re.compile(r"^(\S+): posts big blind ")
+BB_RE = re.compile(r"^(\S+): posts big blind ([\d,]+)")
+COLLECTED_RE = re.compile(r"^(\S+) collected ([\d,]+) from pot\s*$")
+UNCALLED_RE = re.compile(r"^Uncalled bet \(")
 SUMMARY_SEAT_RE = re.compile(r"^Seat (?P<seat>\d+): (?P<rest>.+)$")
 ROLE_PREFIX_RE = re.compile(
     r"^\s*\((?P<role>button|small blind|big blind)\)\s*"
@@ -227,14 +229,117 @@ def rewrite_level(level_n: str, blinds: str, ante: str | None) -> str:
     return f"Level{level_n}({sb}/{bb})"
 
 
-def role_for(seat: int, button: int, sb: int | None, bb: int | None) -> str | None:
+def roles_for(seat: int, button: int, sb: int | None, bb: int | None) -> list[str]:
+    roles: list[str] = []
     if seat == button:
-        return "button"
+        roles.append("button")
     if sb is not None and seat == sb:
-        return "small blind"
+        roles.append("small blind")
     if bb is not None and seat == bb:
-        return "big blind"
-    return None
+        roles.append("big blind")
+    return roles
+
+
+def has_flop(lines: list[str]) -> bool:
+    return any(line.startswith("*** FLOP ***") for line in lines)
+
+
+def has_uncalled(lines: list[str]) -> bool:
+    return any(UNCALLED_RE.match(line) for line in lines)
+
+
+def has_voluntary_put(lines: list[str]) -> bool:
+    in_hole = False
+    for line in lines:
+        if line.startswith("*** HOLE CARDS ***"):
+            in_hole = True
+            continue
+        if line.startswith("*** "):
+            in_hole = False
+        if not in_hole:
+            continue
+        if re.search(r": (raises|calls|bets|checks)\b", line):
+            return True
+    return False
+
+
+def is_true_walk(lines: list[str]) -> bool:
+    return not has_flop(lines) and not has_uncalled(lines) and not has_voluntary_put(lines)
+
+
+def rewrite_walk_uncalled(lines: list[str], bb_name: str | None, bb_amount: int | None) -> None:
+    if not bb_name or not bb_amount or not is_true_walk(lines):
+        return
+    collect_idx = next(
+        (
+            i
+            for i, line in enumerate(lines)
+            if (m := COLLECTED_RE.match(line)) and m.group(1) == bb_name
+        ),
+        None,
+    )
+    if collect_idx is None:
+        return
+    collected = int(parse_amount(COLLECTED_RE.match(lines[collect_idx]).group(2)))
+    if collected <= bb_amount:
+        return
+    new_amt = collected - bb_amount
+    old_amt = f"{collected:,}"
+    new_amt_s = f"{new_amt:,}"
+    insert_at = next(
+        (i for i, line in enumerate(lines) if line.startswith("*** SHOWDOWN ***")),
+        collect_idx,
+    )
+    lines.insert(insert_at, f"Uncalled bet ({bb_amount:,}) returned to {bb_name}")
+    for i, line in enumerate(lines):
+        m = COLLECTED_RE.match(line)
+        if m and m.group(1) == bb_name and int(parse_amount(m.group(2))) == collected:
+            lines[i] = f"{bb_name} collected {new_amt_s} from pot"
+        elif line.startswith("Total pot "):
+            tm = re.match(r"^Total pot ([\d,]+)(.*)$", line)
+            if tm and int(parse_amount(tm.group(1))) == collected:
+                lines[i] = f"Total pot {new_amt_s}{tm.group(2)}"
+        elif line.startswith("Seat ") and f"won ({old_amt})" in line:
+            lines[i] = line.replace(f"won ({old_amt})", f"won ({new_amt_s})")
+        elif line.startswith("Seat ") and f"collected ({old_amt})" in line:
+            lines[i] = line.replace(f"collected ({old_amt})", f"collected ({new_amt_s})")
+
+
+def rewrite_side_pots(lines: list[str]) -> None:
+    if any(
+        "FIRST SHOWDOWN" in line or "SECOND SHOWDOWN" in line or "Hand was run" in line
+        for line in lines
+    ):
+        return
+    collects = [
+        (i, m.group(1), int(parse_amount(m.group(2))))
+        for i, line in enumerate(lines)
+        if (m := COLLECTED_RE.match(line))
+    ]
+    if len(collects) < 2:
+        return
+    names = {name for _, name, _ in collects}
+    if len(names) == 1:
+        name = next(iter(names))
+        total = sum(amt for _, _, amt in collects)
+        first_amt = collects[0][2]
+        lines[collects[0][0]] = f"{name} collected {total:,} from pot"
+        for i, _, _ in reversed(collects[1:]):
+            del lines[i]
+        old = f"{first_amt:,}"
+        new = f"{total:,}"
+        for i, line in enumerate(lines):
+            if line.startswith("Seat ") and f"won ({old})" in line:
+                lines[i] = line.replace(f"won ({old})", f"won ({new})")
+        return
+    side_n = 0
+    for n, (i, name, amt) in enumerate(collects):
+        amt_s = f"{amt:,}"
+        if n == 0:
+            lines[i] = f"{name} collected {amt_s} from main pot"
+        else:
+            side_n += 1
+            lines[i] = f"{name} collected {amt_s} from side pot-{side_n}"
 
 
 def rewrite_summary_seat(
@@ -270,9 +375,10 @@ def rewrite_summary_seat(
     rest = rest.lstrip()
     rest = re.sub(r"^(won|showed|folded|collected)\b", r"\1", rest)
 
-    role = role_for(seat, button, sb, bb)
-    if role:
-        return f"Seat {seat}: {name} ({role}) {rest}"
+    roles = roles_for(seat, button, sb, bb)
+    if roles:
+        role_txt = " ".join(f"({role})" for role in roles)
+        return f"Seat {seat}: {name} {role_txt} {rest}"
     return f"Seat {seat}: {name} {rest}"
 
 
@@ -315,7 +421,9 @@ def rewrite_hand(hand: str, stats: Stats) -> str:
 
     name_to_seat, seat_to_name, stacks = find_player_map(lines)
     sb_name = first_match_name(SB_RE, lines)
-    bb_name = first_match_name(BB_RE, lines)
+    bb_match = next((BB_RE.match(line) for line in lines if BB_RE.match(line)), None)
+    bb_name = bb_match.group(1) if bb_match else None
+    bb_amount = int(parse_amount(bb_match.group(2))) if bb_match else None
     if not bb_name:
         bb_name = summary_bb_name(lines, seat_to_name)
         if not bb_name and sb_name:
@@ -326,6 +434,8 @@ def rewrite_hand(hand: str, stats: Stats) -> str:
             insert_missing_big_blind(
                 lines, bb_name, stacks, player_antes(lines), full_bb
             )
+            bb_match = next((BB_RE.match(line) for line in lines if BB_RE.match(line)), None)
+            bb_amount = int(parse_amount(bb_match.group(2))) if bb_match else bb_amount
     sb_seat = name_to_seat.get(sb_name) if sb_name else None
     bb_seat = name_to_seat.get(bb_name) if bb_name else None
 
@@ -338,8 +448,9 @@ def rewrite_hand(hand: str, stats: Stats) -> str:
             button = int(table_m.group("button"))
             if button == 0:
                 button = infer_button(list(seat_to_name), sb_seat)
+            table_max = "2-max" if len(seat_to_name) == 2 else table_m.group("max")
             lines[table_idx] = (
-                f"Table '{table_name}' {table_m.group('max')} "
+                f"Table '{table_name}' {table_max} "
                 f"Seat #{button} is the button"
             )
         else:
@@ -356,6 +467,9 @@ def rewrite_hand(hand: str, stats: Stats) -> str:
             lines[i] = line.rstrip() + POT_EXTRAS
         elif line.startswith("Seat "):
             lines[i] = rewrite_summary_seat(line, seat_to_name, button, sb_seat, bb_seat)
+
+    rewrite_walk_uncalled(lines, bb_name, bb_amount)
+    rewrite_side_pots(lines)
 
     stats.rewritten += 1
     return "\n".join(lines)

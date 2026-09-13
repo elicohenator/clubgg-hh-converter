@@ -6,7 +6,7 @@ This project is **mostly for Hebrew ClubGG exports** (reversed Hebrew tournament
 
 Cash games and tournament-summary files are out of scope.
 
-Version **1.0.0**. Requires **Python 3.9+**. No third-party packages (`requirements.txt` is empty on purpose).
+Version **1.0.2**. Requires **Python 3.9+**. No third-party packages (`requirements.txt` is empty on purpose).
 
 ## Usage
 
@@ -37,6 +37,9 @@ Hand histories under `input/`, `output/`, and `hands/` are gitignored recursivel
 - Missing ante in `Level(sb/bb)` from `posts the ante`
 - Empty `Table ''`, `Seat #0` button, glued summary text (`Hero(small blind)`, `abcwon`)
 - Missing `posts big blind` when the BB is already all-in on the ante
+- Heads-up tables labeled `8-max` → `2-max`, with `(button) (small blind)` on the same seat
+- Walks (everyone folds to the BB): insert `Uncalled bet` and shrink the collected pot the way official GG does
+- Multi-pot all-ins: merge same-winner pots into one `collected`; split pots use `from main pot` / `from side pot-1`
 - Session filenames like `GG20240115-1800 - .txt` → `GG20240115-1800 - Tournament 1234567.txt`
 
 ## Limits
